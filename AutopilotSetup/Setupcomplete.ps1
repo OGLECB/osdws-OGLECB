@@ -18,13 +18,14 @@ If(!(Test-Path -Path $scriptFolderPath)) {
 $SetupCompleteScript = @"
 %windir%\System32\WindowsPowerShell\v1.0\powershell.exe -ExecutionPolicy ByPass -File C:\OSDCloud\Scripts\OOBETask.ps1
 "@
-    Out-File -FilePath $ScriptPathSetupComplete -InputObject $SetupCompleteScript -Encoding ascii
+Out-File -FilePath $ScriptPathSetupComplete -InputObject $SetupCompleteScript -Encoding ascii
 
 $OOBEScript =@"
 
 `$Global:Transcript = "`$((Get-Date).ToString('yyyy-MM-dd-HHmmss'))-OOBEScripts.log"
 Start-Transcript -Path (Join-Path "`$env:ProgramData\Microsoft\IntuneManagementExtension\Logs\OSD\" `$Global:Transcript) -ErrorAction Ignore | Out-Null
-
+Write-Host -ForegroundColor DarkGray "Starting OOBE Script"
+Write-Host -ForegroundColor DarkGray "Checking For Autopilot Profile"
 `$AutopilotConfigurationPath = "`$env:SystemDrive\Windows\servicestate\wmansvc\"
 `$AutopilotConfigurationFile = `$(Join-Path -Path `$AutopilotConfigurationPath -ChildPath "AutopilotDDSZTDFile.json")
 
@@ -688,7 +689,9 @@ Out-File -FilePath $ScriptPathAutopilotGUI -InputObject $AutopilotScript -Encodi
 
 
 $OOBETASK = @"
-
+`$scriptFolderPath = "C:\OSDCloud\Scripts"
+`$ScriptPathOOBE = `$(Join-Path -Path `$scriptFolderPath -ChildPath "OOBE.ps1")
+`$ScriptPathSendKeys = `$(Join-Path -Path `$scriptFolderPath -ChildPath "SendKeys.ps1")
 # Download ServiceUI.exe
 Write-Host -ForegroundColor Gray "Download ServiceUI.exe from GitHub Repo"
 Invoke-WebRequest https://github.com/AkosBakos/Tools/raw/main/ServiceUI64.exe -OutFile "C:\OSDCloud\ServiceUI.exe"
