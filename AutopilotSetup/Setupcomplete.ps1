@@ -7,6 +7,9 @@ $ScriptPathSendKeys = $(Join-Path -Path $scriptFolderPath -ChildPath "SendKeys.p
 $ScriptPathAutopilotGUI = $(Join-Path -Path $scriptFolderPath -ChildPath "Get-WindowsAutoPilotInfo.ps1")
 $ScriptPathSetupComplete = $(Join-Path -Path $SetupCompleteScriptPath -ChildPath "SetupComplete.cmd")
 $ScriptPathOOBETask = $(Join-Path -Path $scriptFolderPath -ChildPath "OOBETask.ps1")
+If(!(Test-Path -Path $SetupCompleteScriptPath)) {
+    New-Item -Path $SetupCompleteScriptPath -ItemType Directory -Force | Out-Null
+}
 
 If(!(Test-Path -Path $scriptFolderPath)) {
     New-Item -Path $scriptFolderPath -ItemType Directory -Force | Out-Null
