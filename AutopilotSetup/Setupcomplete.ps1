@@ -1,37 +1,106 @@
-$Global:Transcript = "$((Get-Date).ToString('yyyy-MM-dd-HHmmss'))-OOBEScripts.log"
-Start-Transcript -Path (Join-Path "C:ProgramData\Microsoft\IntuneManagementExtension\Logs\OSD\" $Global:Transcript) -ErrorAction Ignore | Out-Null
+#New-Item -Path “c:\OSDCloud\Scripts -ItemType Directory
+#New-Item -Path "c:\Windows\Setup\Scripts\SetupComplete.cmd" -ItemType File
+$SetupCompleteScriptPath = "C:\Windows\Setup\Scripts\"
+$scriptFolderPath = "C:\OSDCloud\Scripts"
+$ScriptPathOOBE = $(Join-Path -Path $scriptFolderPath -ChildPath "OOBE.ps1")
+$ScriptPathSendKeys = $(Join-Path -Path $scriptFolderPath -ChildPath "SendKeys.ps1")
+$ScriptPathAutopilotGUI = $(Join-Path -Path $scriptFolderPath -ChildPath "Get-WindowsAutoPilotInfo.ps1")
+$ScriptPathSetupComplete = $(Join-Path -Path $SetupCompleteScriptPath -ChildPath "SetupComplete.cmd")
+$ScriptPathOOBETask = $(Join-Path -Path $scriptFolderPath -ChildPath "OOBETask.ps1")
 
-$AutopilotConfigurationPath = "C:\Windows\servicestate\wmansvc\"
-$AutopilotConfigurationFile = $(Join-Path -Path $AutopilotConfigurationPath -ChildPath "AutopilotDDSZTDFile.json")
+If(!(Test-Path -Path $scriptFolderPath)) {
+    New-Item -Path $scriptFolderPath -ItemType Directory -Force | Out-Null
+}
 
-$AutopilotJson = Get-Content -Raw $AutopilotConfigurationFile | ConvertFrom-Json
+$SetupCompleteScript = @"
+    `%windir%\System32\WindowsPowerShell\v1.0\powershell.exe -ExecutionPolicy ByPass -File C:\OSDCloud\Scripts\oobetasks.ps1
+"@
+    Out-File -FilePath $ScriptPathSetupComplete -InputObject $SetupCompleteScript -Encoding ascii
 
-#$AutopilotJson.PSObject.Properties.Name -contains "ErrorCode" && $AutopilotJson.PSObject.Properties["ErrorCode"].Value -contains "807"
+$OOBEScript =@"
 
-If(($AutopilotJson.PSObject.Properties.Name -contains "ErrorCode") -and ($AutopilotJson.PSObject.Properties["ErrorCode"].Value -contains "807")) {
+`$Global:Transcript = "`$((Get-Date).ToString('yyyy-MM-dd-HHmmss'))-OOBEScripts.log"
+Start-Transcript -Path (Join-Path "`$env:ProgramData\Microsoft\IntuneManagementExtension\Logs\OSD\" `$Global:Transcript) -ErrorAction Ignore | Out-Null
+
+`$AutopilotConfigurationPath = "`$env:SystemDrive\Windows\servicestate\wmansvc\"
+`$AutopilotConfigurationFile = `$(Join-Path -Path `$AutopilotConfigurationPath -ChildPath "AutopilotDDSZTDFile.json")
+
+`$AutopilotJson = Get-Content -Raw `$AutopilotConfigurationFile | ConvertFrom-Json
+
+#`$AutopilotJson.PSObject.Properties.Name -contains "ErrorCode" && `$AutopilotJson.PSObject.Properties["ErrorCode"].Value -contains "807"
+
+If((`$AutopilotJson.PSObject.Properties.Name -contains "ErrorCode") -and (`$AutopilotJson.PSObject.Properties["ErrorCode"].Value -contains "807")) {
     Write-Host -ForegroundColor DarkGray "No Autopilot profile found. Executing Autopilot GUI"
-   #Start-Process PowerShell -Verb RunAs -Wait -Verbose -ArgumentList '-NoExit -File "C:\OSDCloud\Scripts\Get-WindowsAutoPilotInfo.ps1" -Online'
-   $Global:Transcript = "$((Get-Date).ToString('yyyy-MM-dd-HHmmss'))-AutopilotGUI.log"
-    Start-Transcript -Path (Join-Path "C:ProgramData\Microsoft\IntuneManagementExtension\Logs\OSD\" $Global:Transcript) -ErrorAction Ignore | Out-Null
-    Add-Type -AssemblyName PresentationFramework
-    Add-Type -AssemblyName System.Windows.Forms
+   Start-Process PowerShell -Verb RunAs -Wait -Verbose -ArgumentList '-NoExit -File "C:\OSDCloud\Scripts\Get-WindowsAutoPilotInfo.ps1" -Online'
+}
+else {
+    Write-Host -ForegroundColor DarkGray "Skipping Autopilot GUI - Profile Already Found"
+    Write-Host -ForegroundColor DarkGray `$AutopilotJson
+}
 
-    # XAML file
-    $xamlFile = @'
-        <Window x:Class="WpfApp1.MainWindow"
-            xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-            xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-            xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-            xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-            xmlns:local="clr-namespace:WpfApp1"
-            mc:Ignorable="d"
-            ResizeMode="NoResize"
-            Title="Autopilot Import GUI" Height="636" Width="399">
-        <Grid>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="33*"/>
-                <RowDefinition Height="29*"/>
-            </Grid.RowDefinitions>
+# Cleanup scheduled Tasks
+Write-Host -ForegroundColor DarkGray "Unregistering Scheduled Tasks"
+Unregister-ScheduledTask -TaskName "Scheduled Task for SendKeys" -Confirm:`$false
+Unregister-ScheduledTask -TaskName "Scheduled Task for OSDCloud post installation" -Confirm:`$false
+
+Start-Sleep -Seconds 15
+
+Write-Host -ForegroundColor DarkGray "Executing Cleanup Script"
+Start-Process PowerShell -ArgumentList "-NoL -C Invoke-WebPSScript https://cleanup.osdcloud.ch" -Wait
+
+Start-Sleep -Seconds 30
+
+Write-Host -ForegroundColor DarkGray "Restarting Computer"
+Start-Process PowerShell -ArgumentList "-NoL -C Restart-Computer -Force" -Wait
+
+Stop-Transcript -Verbose | Out-File
+"@
+Out-File -FilePath $ScriptPathOOBE -InputObject $OOBEScript -Encoding ascii
+
+$SendKeysScript = @"
+`$Global:Transcript = "`$((Get-Date).ToString('yyyy-MM-dd-HHmmss'))-SendKeys.log"
+Start-Transcript -Path (Join-Path "`$env:ProgramData\Microsoft\IntuneManagementExtension\Logs\OSD\" `$Global:Transcript) -ErrorAction Ignore | Out-Null
+
+Write-Host -ForegroundColor DarkGray "Stop Debug-Mode (SHIFT + F10) with WscriptShell.SendKeys"
+`$WscriptShell = New-Object -com Wscript.Shell
+
+# ALT + TAB
+Write-Host -ForegroundColor DarkGray "SendKeys: ALT + TAB"
+`$WscriptShell.SendKeys("%({TAB})")
+
+Start-Sleep -Seconds 1
+
+# Shift + F10
+Write-Host -ForegroundColor DarkGray "SendKeys: SHIFT + F10"
+`$WscriptShell.SendKeys("+({F10})")
+
+Stop-Transcript -Verbose | Out-File
+"@
+Out-File -FilePath $ScriptPathSendKeys -InputObject $SendKeysScript -Encoding ascii
+
+$AutopilotScript = @"
+
+`$Global:Transcript = "`$((Get-Date).ToString('yyyy-MM-dd-HHmmss'))-AutopilotGUI.log"
+Start-Transcript -Path (Join-Path "`$env:ProgramData\Microsoft\IntuneManagementExtension\Logs\OSD\" `$Global:Transcript) -ErrorAction Ignore | Out-Null
+    Add-Type -AssemblyName PresentationFramework
+Add-Type -AssemblyName System.Windows.Forms
+
+# XAML file
+`$xamlFile = @'
+<Window x:Class="WpfApp1.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:WpfApp1"
+        mc:Ignorable="d"
+        ResizeMode="NoResize"
+        Title="Autopilot Import GUI" Height="636" Width="399">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="33*"/>
+            <RowDefinition Height="29*"/>
+        </Grid.RowDefinitions>
         <Rectangle HorizontalAlignment="Left" Height="44" Margin="30,228,0,0" Stroke="Black" VerticalAlignment="Top" Width="331"/>
         <Rectangle HorizontalAlignment="Left" Height="108" Margin="30,104,0,0" Stroke="Black" VerticalAlignment="Top" Width="331"/>
         <Button x:Name="button_register" Content="Login and register device in AutoPilot" HorizontalAlignment="Left" Margin="29,28,0,0" VerticalAlignment="Top" Width="332" Height="26" Background="#FF8EFF8B" FontWeight="Bold" BorderBrush="Black" Grid.Row="1"/>
@@ -66,26 +135,26 @@ If(($AutopilotJson.PSObject.Properties.Name -contains "ErrorCode") -and ($Autopi
 '@
 
 #create window
-$inputXML = $xamlFile
-$inputXML = $inputXML -replace 'mc:Ignorable="d"', '' -replace "x:N", 'N' -replace '^<Win.*', '<Window'
-[XML]$XAML = $inputXML
+`$inputXML = `$xamlFile
+`$inputXML = `$inputXML -replace 'mc:Ignorable="d"', '' -replace "x:N", 'N' -replace '^<Win.*', '<Window'
+[XML]`$XAML = `$inputXML
 
 #Read XAML
-$reader = (New-Object System.Xml.XmlNodeReader $xaml)
+`$reader = (New-Object System.Xml.XmlNodeReader `$xaml)
 try {
-    $window = [Windows.Markup.XamlReader]::Load( $reader )
+    `$window = [Windows.Markup.XamlReader]::Load( `$reader )
 }
 catch {
-    Write-Warning $_.Exception
+    Write-Warning `$_.Exception
     throw
 }
 
 # Create variables based on form control names.
 # Variable will be named as 'var_<control name>'
-$xaml.SelectNodes("//*[@Name]") | ForEach-Object {
-    #"trying item $($_.Name)";
+`$xaml.SelectNodes("//*[@Name]") | ForEach-Object {
+    #"trying item `$(`$_.Name)";
     try {
-        Set-Variable -Name "var_$($_.Name)" -Value $window.FindName($_.Name) -ErrorAction Stop
+        Set-Variable -Name "var_`$(`$_.Name)" -Value `$window.FindName(`$_.Name) -ErrorAction Stop
     }
     catch {
         throw
@@ -95,19 +164,19 @@ $xaml.SelectNodes("//*[@Name]") | ForEach-Object {
 # Get-Variable var_*
 
 function Update-ScriptVersion {
-    $ScriptName = "Get-WindowsAutopilotImportGUI"
+    `$ScriptName = "Get-WindowsAutopilotImportGUI"
 
     # Get the currently installed version
-    $LocalVersion = (Get-InstalledScript -Name $ScriptName).Version
+    `$LocalVersion = (Get-InstalledScript -Name `$ScriptName).Version
 
     # Get the latest version from the PowerShell Gallery
-    $GalleryVersion = (Find-Script -Name $ScriptName).Version
+    `$GalleryVersion = (Find-Script -Name `$ScriptName).Version
 
     # Compare the versions
-    if ($LocalVersion -lt $GalleryVersion) {
+    if (`$LocalVersion -lt `$GalleryVersion) {
         # If a newer version is found in the PowerShell Gallery, update the script
-        Update-Script -Name $ScriptName
-        Write-Output "The script has been updated to version $GalleryVersion."
+        Update-Script -Name `$ScriptName
+        Write-Output "The script has been updated to version `$GalleryVersion."
     }
     else {
         Write-Output "You are already using the latest version of the script."
@@ -120,59 +189,59 @@ Write-Output "Starting the script..."
 # Search and download updated version of the script if available
 #Update-ScriptVersion
 
-$button_windowsupdate = $Window.FindName('button_windowsupdate')
-$button_windowsupdate.Add_Click({
-        $script = {
-            $host.UI.RawUI.ForegroundColor = 'Green'
+`$button_windowsupdate = `$Window.FindName('button_windowsupdate')
+`$button_windowsupdate.Add_Click({
+        `$script = {
+            `$host.UI.RawUI.ForegroundColor = 'Green'
             Write-Output "`nInstalling PSWindowsUpdate module..."
             Install-Module PSWindowsUpdate -Force
             Write-Output "`nPSWindowsUpdate module installed successfully."
 
-            $host.UI.RawUI.ForegroundColor = 'Yellow'
+            `$host.UI.RawUI.ForegroundColor = 'Yellow'
             Write-Output "`nImporting PSWindowsUpdate module..."
             Import-Module PSWindowsUpdate
             Write-Output "`nPSWindowsUpdate module imported successfully."
 
-            $host.UI.RawUI.ForegroundColor = 'Cyan'
+            `$host.UI.RawUI.ForegroundColor = 'Cyan'
             Write-Output "`nListing available Windows updates... This may take a while ..."
             Get-WUlist -MicrosoftUpdate
 
             Write-Output "`nInstalling Windows updates..."
             Install-WindowsUpdate -MicrosoftUpdate -AcceptAll -AutoReboot
             Write-Output "`nWindows updates installation initiated."
-            $host.UI.RawUI.ForegroundColor = 'White'
+            `$host.UI.RawUI.ForegroundColor = 'White'
         }
 
-        $encodedCommand = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($script.ToString()))
-        Start-Process powershell -ArgumentList "-NoExit", "-EncodedCommand $encodedCommand" -Verb runAs
+        `$encodedCommand = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes(`$script.ToString()))
+        Start-Process powershell -ArgumentList "-NoExit", "-EncodedCommand `$encodedCommand" -Verb runAs
     })
-    $button_exportcsv = $Window.FindName('button_exportcsv')
-    $button_exportcsv.Add_Click({
+    `$button_exportcsv = `$Window.FindName('button_exportcsv')
+    `$button_exportcsv.Add_Click({
         # Get the folder path
-        $folderPath = Get-FolderPath
-        if ($folderPath -eq $null) {
+        `$folderPath = Get-FolderPath
+        if (`$folderPath -eq `$null) {
             Write-Output "Export process cancelled by user."
             return
         }
     
         # Build the output file path
-        $filePath = Join-Path -Path $folderPath -ChildPath 'AutopilotHWID.csv'
+        `$filePath = Join-Path -Path `$folderPath -ChildPath 'AutopilotHWID.csv'
 
         # Start a new PowerShell process to run the command
         Start-Process powershell -ArgumentList '-NoExit', "-Command & {
-    param($filePath)
+    param(`$filePath)
 
-    $host.UI.RawUI.ForegroundColor = 'Green'
+    `$host.UI.RawUI.ForegroundColor = 'Green'
     Write-Output '`nInstalling Get-WindowsAutopilotInfo module...'
     Install-Module -Name Get-WindowsAutopilotInfo -Force
 
-    $host.UI.RawUI.ForegroundColor = 'Cyan'
+    `$host.UI.RawUI.ForegroundColor = 'Cyan'
     Write-Output '`nGetting Windows Autopilot Info and saving to CSV...'
-    Get-WindowsAutopilotInfo -OutputFile $filePath
-    Write-Output '`nOperation completed successfully. CSV file is saved at '$filePath
+    Get-WindowsAutopilotInfo -OutputFile `$filePath
+    Write-Output '`nOperation completed successfully. CSV file is saved at '`$filePath
 
-    $host.UI.RawUI.ForegroundColor = 'White'
-    } $filePath" -Verb runAs
+    `$host.UI.RawUI.ForegroundColor = 'White'
+    } `$filePath" -Verb runAs
     })
 
 
@@ -180,19 +249,19 @@ $button_windowsupdate.Add_Click({
 # function to check internet connection
 function connectivity_check {
 
-    $ErrorActionPreference = 'SilentlyContinue'
-    $WarningPreference = 'SilentlyContinue'
-    $OriginalProgressPreference = $Global:ProgressPreference
-    $Global:ProgressPreference = 'SilentlyContinue'
+    `$ErrorActionPreference = 'SilentlyContinue'
+    `$WarningPreference = 'SilentlyContinue'
+    `$OriginalProgressPreference = `$Global:ProgressPreference
+    `$Global:ProgressPreference = 'SilentlyContinue'
 
-    $ComputerInfo = Get-CimInstance -ClassName Win32_ComputerSystem
-    $ComputerName = $ComputerInfo.Name
-    $Serialnumber = Get-CimInstance win32_SystemEnclosure | Select-Object -Property serialnumber
+    `$ComputerInfo = Get-CimInstance -ClassName Win32_ComputerSystem
+    `$ComputerName = `$ComputerInfo.Name
+    `$Serialnumber = Get-CimInstance win32_SystemEnclosure | Select-Object -Property serialnumber
 
     Write-Output "--- Basic Info ---"
 
-    Write-Output "Computername:" $ComputerName
-    Write-Output "Serialnumber:" $Serialnumber.serialnumber
+    Write-Output "Computername:" `$ComputerName
+    Write-Output "Serialnumber:" `$Serialnumber.serialnumber
 
     Write-Output `n
 
@@ -201,8 +270,8 @@ function connectivity_check {
 
     Write-Output -BackgroundColor DarkBlue "--- Checking connectivity for: Enterprise regitration ---"
 
-    $MDM_registration = (Test-NetConnection enterpriseregistration.windows.net -Port 443 ).TcpTestSucceeded
-    If ($MDM_registration -eq "True") {
+    `$MDM_registration = (Test-NetConnection enterpriseregistration.windows.net -Port 443 ).TcpTestSucceeded
+    If (`$MDM_registration -eq "True") {
         Write-Output -NoNewline -ForegroundColor DarkGreen "MDM_registration - Success "
         Write-Output @CheckIcon
     }
@@ -211,8 +280,8 @@ function connectivity_check {
         Write-Output @ErrorIcon
     }
 
-    $MDM_enrollment = (Test-NetConnection enterpriseenrollment-s.manage.microsoft.com -Port 443 ).TcpTestSucceeded
-    If ($MDM_enrollment -eq "True") {
+    `$MDM_enrollment = (Test-NetConnection enterpriseenrollment-s.manage.microsoft.com -Port 443 ).TcpTestSucceeded
+    If (`$MDM_enrollment -eq "True") {
         Write-Output -NoNewline -ForegroundColor DarkGreen "MDM_enrollment - Success "
         Write-Output @CheckIcon
     }
@@ -228,8 +297,8 @@ function connectivity_check {
 
     Write-Output -BackgroundColor DarkBlue "--- Checking connectivity for: Windows Autopilot Deployment Services ---"
 
-    $AutoPilot_ztd = (Test-NetConnection ztd.dds.microsoft.com -Port 443 ).TcpTestSucceeded
-    If ($AutoPilot_ztd -eq "True") {
+    `$AutoPilot_ztd = (Test-NetConnection ztd.dds.microsoft.com -Port 443 ).TcpTestSucceeded
+    If (`$AutoPilot_ztd -eq "True") {
         Write-Output -NoNewline -ForegroundColor DarkGreen "AutoPilot_ztd - Success "
         Write-Output @CheckIcon
     }
@@ -238,8 +307,8 @@ function connectivity_check {
         Write-Output @ErrorIcon
     }
 
-    $AutoPilot_cs = (Test-NetConnection cs.dds.microsoft.com -Port 443 ).TcpTestSucceeded
-    If ($AutoPilot_cs -eq "True") {
+    `$AutoPilot_cs = (Test-NetConnection cs.dds.microsoft.com -Port 443 ).TcpTestSucceeded
+    If (`$AutoPilot_cs -eq "True") {
         Write-Output -NoNewline -ForegroundColor DarkGreen "AutoPilot_cs - Success "
         Write-Output @CheckIcon
     }
@@ -248,8 +317,8 @@ function connectivity_check {
         Write-Output @ErrorIcon
     }
 
-    $AutoPilot_login = (Test-NetConnection login.live.com -Port 443 ).TcpTestSucceeded
-    If ($AutoPilot_login -eq "True") {
+    `$AutoPilot_login = (Test-NetConnection login.live.com -Port 443 ).TcpTestSucceeded
+    If (`$AutoPilot_login -eq "True") {
         Write-Output -NoNewline -ForegroundColor DarkGreen "AutoPilot_login - Success "
         Write-Output @CheckIcon
     }
@@ -265,8 +334,8 @@ function connectivity_check {
 
     Write-Output -BackgroundColor DarkBlue "--- Checking connectivity for: License activation service ---"
 
-    $Licensing_activation = (Test-NetConnection activation.sls.microsoft.com -Port 443 ).TcpTestSucceeded
-    If ($Licensing_activation -eq "True") {
+    `$Licensing_activation = (Test-NetConnection activation.sls.microsoft.com -Port 443 ).TcpTestSucceeded
+    If (`$Licensing_activation -eq "True") {
         Write-Output -NoNewline -ForegroundColor DarkGreen "Licensing_activation - Success "
         Write-Output @CheckIcon
     }
@@ -275,8 +344,8 @@ function connectivity_check {
         Write-Output @ErrorIcon
     }
 
-    $Licensing_validation = (Test-NetConnection validation.sls.microsoft.com -Port 443 ).TcpTestSucceeded
-    If ($Licensing_validation -eq "True") {
+    `$Licensing_validation = (Test-NetConnection validation.sls.microsoft.com -Port 443 ).TcpTestSucceeded
+    If (`$Licensing_validation -eq "True") {
         Write-Output -NoNewline -ForegroundColor DarkGreen "Licensing_validation - Success "
         Write-Output @CheckIcon
     }
@@ -292,7 +361,7 @@ function connectivity_check {
     Write-Output -BackgroundColor DarkBlue "--- Checking connectivity for: Windows Update for Business Service ---"
 
     $WufB = (Test-NetConnection update.microsoft.com -Port 443 ).TcpTestSucceeded
-    If ($WufB -eq "True") {
+    If (`$WufB -eq "True") {
         Write-Output -NoNewline -ForegroundColor DarkGreen "WufB - Success "
         Write-Output @CheckIcon
     }
@@ -307,8 +376,8 @@ function connectivity_check {
 
     Write-Output -BackgroundColor DarkBlue "--- Checking connectivity for: Single Sign-On ---"
 
-    $SSO = (Test-NetConnection autologon.microsoftazuread-sso.com -Port 443 ).TcpTestSucceeded
-    If ($SSO -eq "True") {
+    `$SSO = (Test-NetConnection autologon.microsoftazuread-sso.com -Port 443 ).TcpTestSucceeded
+    If (`$SSO -eq "True") {
         Write-Output -NoNewline -ForegroundColor DarkGreen "SSO - Success "
         Write-Output @CheckIcon
     }
@@ -324,8 +393,8 @@ function connectivity_check {
 
     Write-Output -BackgroundColor DarkBlue "--- TPM Connectivity to Intel, Qualcomm and AMD ---"
 
-    $TPM_Intel = (Test-NetConnection ekop.intel.com -Port 443).TcpTestSucceeded
-    If ($TPM_Intel -eq "True") {
+    `$TPM_Intel = (Test-NetConnection ekop.intel.com -Port 443).TcpTestSucceeded
+    If (`$TPM_Intel -eq "True") {
         Write-Output -NoNewline -ForegroundColor DarkGreen "TPM_Intel - Success "
         Write-Output @CheckIcon
     }
@@ -334,8 +403,8 @@ function connectivity_check {
         Write-Output @ErrorIcon
     }
 
-    $TPM_Qualcomm = (Test-NetConnection ekcert.spserv.microsoft.com -Port 443).TcpTestSucceeded
-    If ($TPM_Qualcomm -eq "True") {
+    `$TPM_Qualcomm = (Test-NetConnection ekcert.spserv.microsoft.com -Port 443).TcpTestSucceeded
+    If (`$TPM_Qualcomm -eq "True") {
         Write-Output -NoNewline -ForegroundColor DarkGreen "TPM_Qualcomm - Success "
         Write-Output @CheckIcon
     }
@@ -344,8 +413,8 @@ function connectivity_check {
         Write-Output @ErrorIcon
     }
 
-    $TPM_AMD = (Test-NetConnection ftpm.amd.com -Port 443).TcpTestSucceeded
-    If ($TPM_AMD -eq "True") {
+    `$TPM_AMD = (Test-NetConnection ftpm.amd.com -Port 443).TcpTestSucceeded
+    If (`$TPM_AMD -eq "True") {
         Write-Output -NoNewline -ForegroundColor DarkGreen "TPM_AMD - Success "
         Write-Output @CheckIcon
     }
@@ -354,8 +423,8 @@ function connectivity_check {
         Write-Output @ErrorIcon
     }
 
-    $TPM_Azure = (Test-NetConnection azure.net -Port 443).TcpTestSucceeded
-    If ($TPM_Azure -eq "True") {
+    `$TPM_Azure = (Test-NetConnection azure.net -Port 443).TcpTestSucceeded
+    If (`$TPM_Azure -eq "True") {
         Write-Output -NoNewline -ForegroundColor DarkGreen "TPM_Azure - Success "
         Write-Output @CheckIcon
     }
@@ -370,8 +439,8 @@ function connectivity_check {
 
     Write-Output -BackgroundColor DarkBlue "--- Checking connectivity for: Config deployment and access for managed devices ---"
 
-    $Intune_ConfigDeployment_microsoftonline = (Test-NetConnection login.microsoftonline.com -Port 443).TcpTestSucceeded
-    If ($Intune_ConfigDeployment_microsoftonline -eq "True") {
+    `$Intune_ConfigDeployment_microsoftonline = (Test-NetConnection login.microsoftonline.com -Port 443).TcpTestSucceeded
+    If (`$Intune_ConfigDeployment_microsoftonline -eq "True") {
         Write-Output -NoNewline -ForegroundColor DarkGreen "Intune_ConfigDeployment_microsoftonline - Success "
         Write-Output @CheckIcon
     }
@@ -380,8 +449,8 @@ function connectivity_check {
         Write-Output @ErrorIcon
     }
 
-    $Intune_ConfigDeployment_configoffice = (Test-NetConnection config.office.com -Port 443).TcpTestSucceeded
-    If ($Intune_ConfigDeployment_configoffice -eq "True") {
+    `$Intune_ConfigDeployment_configoffice = (Test-NetConnection config.office.com -Port 443).TcpTestSucceeded
+    If (`$Intune_ConfigDeployment_configoffice -eq "True") {
         Write-Output -NoNewline -ForegroundColor DarkGreen "Intune_ConfigDeployment_configoffice - Success "
         Write-Output @CheckIcon
     }
@@ -390,8 +459,8 @@ function connectivity_check {
         Write-Output @ErrorIcon
     }
 
-    $Intune_ConfigDeployment_graph = (Test-NetConnection graph.windows.net -Port 443).TcpTestSucceeded
-    If ($Intune_ConfigDeployment_graph -eq "True") {
+    `$Intune_ConfigDeployment_graph = (Test-NetConnection graph.windows.net -Port 443).TcpTestSucceeded
+    If (`$Intune_ConfigDeployment_graph -eq "True") {
         Write-Output -NoNewline -ForegroundColor DarkGreen "Intune_ConfigDeployment_graph - Success "
         Write-Output @CheckIcon
     }
@@ -406,8 +475,8 @@ function connectivity_check {
 
     Write-Output -BackgroundColor DarkBlue "--- Checking connectivity for: Network requirements for PowerShell scripts and Win32 apps ---"
 
-    $Intune_AppDeployment_pri = (Test-NetConnection euprodimedatapri.azureedge.net -Port 443).TcpTestSucceeded
-    If ($Intune_AppDeployment_pri -eq "True") {
+    `$Intune_AppDeployment_pri = (Test-NetConnection euprodimedatapri.azureedge.net -Port 443).TcpTestSucceeded
+    If (`$Intune_AppDeployment_pri -eq "True") {
         Write-Output -NoNewline -ForegroundColor DarkGreen "Intune_AppDeployment_pri - Success "
         Write-Output @CheckIcon
     }
@@ -416,8 +485,8 @@ function connectivity_check {
         Write-Output @ErrorIcon
     }
 
-    $Intune_AppDeployment_sec = (Test-NetConnection euprodimedatasec.azureedge.net -Port 443).TcpTestSucceeded
-    If ($Intune_AppDeployment_sec -eq "True") {
+    `$Intune_AppDeployment_sec = (Test-NetConnection euprodimedatasec.azureedge.net -Port 443).TcpTestSucceeded
+    If (`$Intune_AppDeployment_sec -eq "True") {
         Write-Output -NoNewline -ForegroundColor DarkGreen "Intune_AppDeployment_sec - Success "
         Write-Output @CheckIcon
     }
@@ -426,8 +495,8 @@ function connectivity_check {
         Write-Output @ErrorIcon
     }
 
-    $Intune_AppDeployment_hotfix = (Test-NetConnection euprodimedatahotfix.azureedge.net -Port 443).TcpTestSucceeded
-    If ($Intune_AppDeployment_hotfix -eq "True") {
+    `$Intune_AppDeployment_hotfix = (Test-NetConnection euprodimedatahotfix.azureedge.net -Port 443).TcpTestSucceeded
+    If (`$Intune_AppDeployment_hotfix -eq "True") {
         Write-Output -NoNewline -ForegroundColor DarkGreen "Intune_AppDeployment_hotfix - Success "
         Write-Output @CheckIcon
     }
@@ -438,7 +507,7 @@ function connectivity_check {
 
     Write-Output `n
 
-    $Global:ProgressPreference = $OriginalProgressPreference
+    `$Global:ProgressPreference = `$OriginalProgressPreference
 
     Read-Host -Prompt "Press Enter to exit"
 }
@@ -450,139 +519,139 @@ function Get-TimeStamp {
 function Write-Log {
     Param
     (
-        $text
+        `$text
     )
 
-    "$text" | out-file "c:\Autopilot_Import_GUI_log.txt" -Append -Force
+    "`$text" | out-file "c:\Autopilot_Import_GUI_log.txt" -Append -Force
 }
 
-Write-Log -text "--- Start Logging: $(Get-TimeStamp) ---"
+Write-Log -text "--- Start Logging: `$(Get-TimeStamp) ---"
 
 
 
 #Time and Date
 
-$timer1 = New-Object 'System.Windows.Forms.Timer'
-$timer1_Tick = {
-    $var_text_time.Text = (Get-Date).ToString("HH:mm:ss")
+`$timer1 = New-Object 'System.Windows.Forms.Timer'
+`$timer1_Tick = {
+    `$var_text_time.Text = (Get-Date).ToString("HH:mm:ss")
 }
 
-$timer1.Enabled = $True
-$timer1.Interval = 1000 # in ms -> 1000 = Update clock every second
-$timer1.add_Tick($timer1_Tick)
+`$timer1.Enabled = `$True
+`$timer1.Interval = 1000 # in ms -> 1000 = Update clock every second
+`$timer1.add_Tick(`$timer1_Tick)
 
-$var_text_date.Text = (Get-Date).ToString("MM/dd/yyyy")
+`$var_text_date.Text = (Get-Date).ToString("MM/dd/yyyy")
 
 #endregion
 
 #Region Icons
 
-$CheckIcon = @{
+`$CheckIcon = @{
     Object          = [Char]8730
     ForegroundColor = 'Green'
-    NoNewLine       = $false
+    NoNewLine       = `$false
 }
 
-$ErrorIcon = @{
+`$ErrorIcon = @{
     Object          = [Char]8709
     ForegroundColor = 'Red'
-    NoNewLine       = $false
+    NoNewLine       = `$false
 }
 #endregion
 
 #endregion
 
-$var_button_grouptag.Add_Click{
-    $Grouptag_input = $var_text_grouptag.text
-    $var_text_output.AppendText("`r`n$(Get-TimeStamp) Selected Group Tag: $Grouptag_input")
+`$var_button_grouptag.Add_Click{
+    `$Grouptag_input = `$var_text_grouptag.text
+    `$var_text_output.AppendText("`r`n`$(Get-TimeStamp) Selected Group Tag: `$Grouptag_input")
 }
 
-$var_text_serialnumber.Text = (Get-WmiObject -class win32_bios).SerialNumber
-$var_text_devicemodel.Text = (Get-CimInstance -ClassName Win32_ComputerSystem).Model
-$var_text_devicename.Text = (Get-CimInstance -ClassName Win32_ComputerSystem).Name
-$var_text_manufacturer.Text = (Get-CimInstance -ClassName Win32_ComputerSystem).Manufacturer
-$var_text_freespace.Text = (Get-CimInstance -ClassName Win32_LogicalDisk | Select-Object -Property DeviceID, @{'Name' = 'FreeSpace (GB)'; Expression = { [int]($_.FreeSpace / 1GB) } } | Measure-Object -Property 'FreeSpace (GB)' -Sum).Sum
+`$var_text_serialnumber.Text = (Get-WmiObject -class win32_bios).SerialNumber
+`$var_text_devicemodel.Text = (Get-CimInstance -ClassName Win32_ComputerSystem).Model
+`$var_text_devicename.Text = (Get-CimInstance -ClassName Win32_ComputerSystem).Name
+`$var_text_manufacturer.Text = (Get-CimInstance -ClassName Win32_ComputerSystem).Manufacturer
+`$var_text_freespace.Text = (Get-CimInstance -ClassName Win32_LogicalDisk | Select-Object -Property DeviceID, @{'Name' = 'FreeSpace (GB)'; Expression = { [int](`$_.FreeSpace / 1GB) } } | Measure-Object -Property 'FreeSpace (GB)' -Sum).Sum
 
-$var_button_register.Add_Click{
-    $var_text_output.AppendText("`r`n$(Get-TimeStamp) Installing Powershell Module Get-WindowsAutopilotInfo.")
-    Write-Log -text "`r`n$(Get-TimeStamp) Installing Powershell Module Get-WindowsAutopilotInfo."
-    $var_text_output.AppendText("`r`n$(Get-TimeStamp) Running import process.")
-    Write-Log -text "`r`n$(Get-TimeStamp) Running import process."
-    $scriptlocation = "$env:ProgramFiles\WindowsPowerShell\Scripts"
-    Set-Location $scriptlocation
-    $GroupTag = $var_text_grouptag.text
+`$var_button_register.Add_Click{
+    `$var_text_output.AppendText("`r`n`$(Get-TimeStamp) Installing Powershell Module Get-WindowsAutopilotInfo.")
+    Write-Log -text "`r`n`$(Get-TimeStamp) Installing Powershell Module Get-WindowsAutopilotInfo."
+    `$var_text_output.AppendText("`r`n`$(Get-TimeStamp) Running import process.")
+    Write-Log -text "`r`n`$(Get-TimeStamp) Running import process."
+    `$scriptlocation = "`$env:ProgramFiles\WindowsPowerShell\Scripts"
+    Set-Location `$scriptlocation
+    `$GroupTag = `$var_text_grouptag.text
 
-    if ([string]::IsNullOrWhiteSpace($GroupTag) -eq "True") {
+    if ([string]::IsNullOrWhiteSpace(`$GroupTag) -eq "True") {
 
-        $Start_Register = (Start-Process PowerShell -Argumentlist "
+        `$Start_Register = (Start-Process PowerShell -Argumentlist "
         -NoExit
         #-NoProfile
         Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
         Install-PackageProvider -Name NuGet -Force
-        Write-Output 'Installing get-windowsautopilotinfocommunity:'`n
-        Install-Script -Name get-windowsautopilotinfocommunity -Force
+        Write-Output 'Installing Get-WindowsAutopilotInfo:'`n
+        Install-Script -Name Get-WindowsAutoPilotInfo -Force
 
         Write-Output 'No Group Tag is selected'
 
         Write-Output 'Installing dependencies (Module: WindowsAutopilotIntune).'`n
         Write-Output 'Opening Login Window after the installation was successfull:'`n
 
-        get-windowsautopilotinfocommunity -online
+        .\Get-WindowsAutopilotInfo.ps1 -online
         ")
 
     }
     else {
 
-        $Start_Register = (Start-Process PowerShell -Argumentlist "
+        `$Start_Register = (Start-Process PowerShell -Argumentlist "
         -NoExit
         #-NoProfile
         Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
         Install-PackageProvider -Name NuGet -Force
-        Write-Output 'Installing get-windowsautopilotinfocommunity:'`n
-        Install-Script -Name get-windowsautopilotinfocommunity -Force
+        Write-Output 'Installing Get-WindowsAutopilotInfo:'`n
+        Install-Script -Name Get-WindowsAutoPilotInfo -Force
 
-        Write-Output 'Selected Group Tag: $GroupTag'
+        Write-Output 'Selected Group Tag: `$GroupTag'
 
         Write-Output 'Installing dependencies (Module: WindowsAutopilotIntune).'`n
         Write-Output 'Opening Login Window after the installation was successfull:'`n
 
-        get-windowsautopilotinfocommunity -online -assign -GroupTag '$GroupTag'
+        .\Get-WindowsAutopilotInfo.ps1 -online -assign -GroupTag '`$GroupTag'
 
         ")
 
     }
 
-    $var_text_output.AppendText("`r`n$(Get-TimeStamp) Running: get-windowsautopilotinfocommunity.ps1 -GroupTag $GroupTag -online -assign -reboot")
+    `$var_text_output.AppendText("`r`n`$(Get-TimeStamp) Running: Get-WindowsAutoPilotInfo.ps1 -GroupTag `$GroupTag -online -assign -reboot")
     # Scroll to bottom of the output box.
-    $var_text_output.ScrollToEnd()
+    `$var_text_output.ScrollToEnd()
 }
 
 if (Test-Connection 8.8.8.8 -Quiet -ErrorAction "SilentlyContinue") {
     Write-Output "Connected to the Internet."
-    Write-Log -text "`r`n$(Get-TimeStamp) Connected to the Internet."
-    $var_text_internet_connection.text = "Connected to the Internet."
-    $var_text_internet_connection.Fontweight = "Bold"
-    $var_text_internet_connection.Foreground = "#00a300"
+    Write-Log -text "`r`n`$(Get-TimeStamp) Connected to the Internet."
+    `$var_text_internet_connection.text = "Connected to the Internet."
+    `$var_text_internet_connection.Fontweight = "Bold"
+    `$var_text_internet_connection.Foreground = "#00a300"
 }
 else {
     Write-Output "Not connected to the Internet."
-    Write-Log -text "`r`n$(Get-TimeStamp) Not connected to the Internet."
-    $var_text_internet_connection.text = "Not connected to the Internet."
-    $var_text_internet_connection.Fontweight = "Bold"
-    $var_text_internet_connection.Foreground = "#a30000"
+    Write-Log -text "`r`n`$(Get-TimeStamp) Not connected to the Internet."
+    `$var_text_internet_connection.text = "Not connected to the Internet."
+    `$var_text_internet_connection.Fontweight = "Bold"
+    `$var_text_internet_connection.Foreground = "#a30000"
 }
 
-$var_button_check_connectivity.Add_Click{
-    $var_text_output.AppendText("`r`n$(Get-TimeStamp) Running Network connectivity check.")
-    Write-Log -text "`r`n$(Get-TimeStamp) Running Network connectivity check."
-    $getfunction = (Get-Command -Type Function connectivity_check)
-    $fullgetfunction = 'Function ' + $getfunction.Name + " {`n" + $getfunction.Definition + "`n}"
+`$var_button_check_connectivity.Add_Click{
+    `$var_text_output.AppendText("`r`n`$(Get-TimeStamp) Running Network connectivity check.")
+    Write-Log -text "`r`n`$(Get-TimeStamp) Running Network connectivity check."
+    `$getfunction = (Get-Command -Type Function connectivity_check)
+    `$fullgetfunction = 'Function ' + `$getfunction.Name + " {`n" + `$getfunction.Definition + "`n}"
 
-    Start-Process powershell -args '-noprofile', '-EncodedCommand', ([Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes("$fullgetfunction; connectivity_check")))
+    Start-Process powershell -args '-noprofile', '-EncodedCommand', ([Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes("`$fullgetfunction; connectivity_check")))
 }
 
-$var_button_howto.Add_Click({
-        $howToText = @'
+`$var_button_howto.Add_Click({
+        `$howToText = @'
 1. Login and Register Device in AutoPilot: This will log you in and register your current device in Microsoft Autopilot.
 2. Network Connectivity Check: This checks if your device is connected to the internet.
 3. Device Information: This area displays relevant information about your device like the device model, name, manufacturer, serial number and available storage.
@@ -590,27 +659,83 @@ $var_button_howto.Add_Click({
 5. Start Windows Update: This will start the Windows Update process on your device.
 6. Export Hash to CSV: This will export the hash of your device to a CSV file for future reference or use.
 '@
-        [System.Windows.MessageBox]::Show($howToText, "How does it work?")
+        [System.Windows.MessageBox]::Show(`$howToText, "How does it work?")
     })
 
-$var_text_author.Text = "@ugurkocde"
+`$var_text_author.Text = "@ugurkocde"
 
 function Get-ScriptVersion {
-    $ScriptName = "get-windowsautopilotinfocommunity"
+    `$ScriptName = "Get-WindowsAutopilotImportGUI"
     # Get the currently installed version
-    $LocalVersion = "1.3"
-    return $LocalVersion
+    `$LocalVersion = "1.3"
+    return `$LocalVersion
 }
 
-$var_text_version.text = "Version: " + (Get-ScriptVersion)
+`$var_text_version.text = "Version: " + (Get-ScriptVersion)
 
 # Open GUI
 
-$Null = $window.ShowDialog()
+`$Null = `$window.ShowDialog()
 
 Stop-Transcript -Verbose | Out-File
-}
-else {
-    Write-Host -ForegroundColor DarkGray "Skipping Autopilot GUI - Profile Already Found"
-    Write-Host -ForegroundColor DarkGray $AutopilotJson
-}
+
+"@
+
+Out-File -FilePath $ScriptPathAutopilotGUI -InputObject $AutopilotScript -Encoding ascii
+
+
+$OOBETASK = @"
+
+# Download ServiceUI.exe
+Write-Host -ForegroundColor Gray "Download ServiceUI.exe from GitHub Repo"
+Invoke-WebRequest https://github.com/AkosBakos/Tools/raw/main/ServiceUI64.exe -OutFile "C:\OSDCloud\ServiceUI.exe"
+
+#Create Scheduled Task for SendKeys with 15 seconds delay
+$TaskName = "Scheduled Task for SendKeys"
+
+$ShedService = New-Object -comobject 'Schedule.Service'
+$ShedService.Connect()
+
+$Task = $ShedService.NewTask(0)
+$Task.RegistrationInfo.Description = $taskName
+$Task.Settings.Enabled = $true
+$Task.Settings.AllowDemandStart = $true
+
+# https://msdn.microsoft.com/en-us/library/windows/desktop/aa383987(v=vs.85).aspx
+$trigger = $task.triggers.Create(9) # 0 EventTrigger, 1 TimeTrigger, 2 DailyTrigger, 3 WeeklyTrigger, 4 MonthlyTrigger, 5 MonthlyDOWTrigger, 6 IdleTrigger, 7 RegistrationTrigger, 8 BootTrigger, 9 LogonTrigger
+$trigger.Delay = 'PT15S'
+$trigger.Enabled = $true
+
+$action = $Task.Actions.Create(0)
+$action.Path = 'C:\OSDCloud\ServiceUI.exe'
+$action.Arguments = '-process:RuntimeBroker.exe C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe ' + $ScriptPathSendKeys + ' -NoExit'
+
+$taskFolder = $ShedService.GetFolder("\")
+# https://msdn.microsoft.com/en-us/library/windows/desktop/aa382577(v=vs.85).aspx
+$taskFolder.RegisterTaskDefinition($TaskName, $Task , 6, "SYSTEM", $NULL, 5)
+
+# Create Scheduled Task for OSDCloud post installation with 20 seconds delay
+$TaskName = "Scheduled Task for OSDCloud post installation"
+
+$ShedService = New-Object -comobject 'Schedule.Service'
+$ShedService.Connect()
+
+$Task = $ShedService.NewTask(0)
+$Task.RegistrationInfo.Description = $taskName
+$Task.Settings.Enabled = $true
+$Task.Settings.AllowDemandStart = $true
+
+# https://msdn.microsoft.com/en-us/library/windows/desktop/aa383987(v=vs.85).aspx
+$trigger = $task.triggers.Create(9) # 0 EventTrigger, 1 TimeTrigger, 2 DailyTrigger, 3 WeeklyTrigger, 4 MonthlyTrigger, 5 MonthlyDOWTrigger, 6 IdleTrigger, 7 RegistrationTrigger, 8 BootTrigger, 9 LogonTrigger
+$trigger.Delay = 'PT20S'
+$trigger.Enabled = $true
+
+$action = $Task.Actions.Create(0)
+$action.Path = 'C:\OSDCloud\ServiceUI.exe'
+$action.Arguments = '-process:RuntimeBroker.exe C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe ' + $ScriptPathOOBE + ' -NoExit'
+
+$taskFolder = $ShedService.GetFolder("\")
+# https://msdn.microsoft.com/en-us/library/windows/desktop/aa382577(v=vs.85).aspx
+$taskFolder.RegisterTaskDefinition($TaskName, $Task , 6, "SYSTEM", $NULL, 5)
+"@
+Out-File -FilePath $ScriptPathOOBETask -InputObject $OOBETASK -Encoding ascii
