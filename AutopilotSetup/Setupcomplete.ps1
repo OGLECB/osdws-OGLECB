@@ -702,12 +702,12 @@ Invoke-WebRequest https://github.com/AkosBakos/Tools/raw/main/ServiceUI64.exe -O
 `$Task = `$ShedService.NewTask(0)
 `$Task.RegistrationInfo.Description = `$taskName
 `$Task.Settings.Enabled = `$true
-`$Task.Settings.AllowDemandStart = $true
+`$Task.Settings.AllowDemandStart = `$true
 
 # https://msdn.microsoft.com/en-us/library/windows/desktop/aa383987(v=vs.85).aspx
-`$trigger = $task.triggers.Create(9) # 0 EventTrigger, 1 TimeTrigger, 2 DailyTrigger, 3 WeeklyTrigger, 4 MonthlyTrigger, 5 MonthlyDOWTrigger, 6 IdleTrigger, 7 RegistrationTrigger, 8 BootTrigger, 9 LogonTrigger
+`$trigger = `$task.triggers.Create(9) # 0 EventTrigger, 1 TimeTrigger, 2 DailyTrigger, 3 WeeklyTrigger, 4 MonthlyTrigger, 5 MonthlyDOWTrigger, 6 IdleTrigger, 7 RegistrationTrigger, 8 BootTrigger, 9 LogonTrigger
 `$trigger.Delay = 'PT15S'
-`$trigger.Enabled = $true
+`$trigger.Enabled = `$true
 
 `$action = `$Task.Actions.Create(0)
 `$action.Path = 'C:\OSDCloud\ServiceUI.exe'
@@ -725,13 +725,13 @@ Invoke-WebRequest https://github.com/AkosBakos/Tools/raw/main/ServiceUI64.exe -O
 
 `$Task = `$ShedService.NewTask(0)
 `$Task.RegistrationInfo.Description = `$taskName
-`$Task.Settings.Enabled = $true
-`$Task.Settings.AllowDemandStart = $true
+`$Task.Settings.Enabled = `$true
+`$Task.Settings.AllowDemandStart = `$true
 
 # https://msdn.microsoft.com/en-us/library/windows/desktop/aa383987(v=vs.85).aspx
 `$trigger = `$task.triggers.Create(9) # 0 EventTrigger, 1 TimeTrigger, 2 DailyTrigger, 3 WeeklyTrigger, 4 MonthlyTrigger, 5 MonthlyDOWTrigger, 6 IdleTrigger, 7 RegistrationTrigger, 8 BootTrigger, 9 LogonTrigger
 `$trigger.Delay = 'PT20S'
-`$trigger.Enabled = $true
+`$trigger.Enabled = `$true
 
 `$action = `$Task.Actions.Create(0)
 `$action.Path = 'C:\OSDCloud\ServiceUI.exe'
