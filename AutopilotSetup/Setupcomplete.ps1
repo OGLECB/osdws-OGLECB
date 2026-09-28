@@ -16,7 +16,7 @@ If(!(Test-Path -Path $scriptFolderPath)) {
 }
 
 $SetupCompleteScript = @"
-%windir%\System32\WindowsPowerShell\v1.0\powershell.exe -ExecutionPolicy ByPass -File C:\OSDCloud\Scripts\oobetasks.ps1
+%windir%\System32\WindowsPowerShell\v1.0\powershell.exe -ExecutionPolicy ByPass -File C:\OSDCloud\Scripts\OOBETask.ps1
 "@
     Out-File -FilePath $ScriptPathSetupComplete -InputObject $SetupCompleteScript -Encoding ascii
 
