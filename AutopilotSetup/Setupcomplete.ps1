@@ -237,11 +237,11 @@ Write-Output "Starting the script..."
 
     `$host.UI.RawUI.ForegroundColor = 'Green'
     Write-Output '`nInstalling Get-WindowsAutopilotInfo module...'
-    Install-Module -Name Get-WindowsAutopilotInfo -Force
+    Install-Module -Name Get-WindowsAutopilotInfoCommunity -Force
 
     `$host.UI.RawUI.ForegroundColor = 'Cyan'
     Write-Output '`nGetting Windows Autopilot Info and saving to CSV...'
-    Get-WindowsAutopilotInfo -OutputFile `$filePath
+    Get-WindowsAutopilotInfoCommunity -OutputFile `$filePath
     Write-Output '`nOperation completed successfully. CSV file is saved at '`$filePath
 
     `$host.UI.RawUI.ForegroundColor = 'White'
@@ -593,14 +593,14 @@ Write-Log -text "--- Start Logging: `$(Get-TimeStamp) ---"
         Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
         Install-PackageProvider -Name NuGet -Force
         Write-Output 'Installing Get-WindowsAutopilotInfo:'`n
-        Install-Script -Name Get-WindowsAutoPilotInfo -Force
+        Install-Script -Name get-windowsautopilotinfocommunity -Force
 
         Write-Output 'No Group Tag is selected'
 
         Write-Output 'Installing dependencies (Module: WindowsAutopilotIntune).'`n
         Write-Output 'Opening Login Window after the installation was successfull:'`n
 
-        .\Get-WindowsAutopilotInfo.ps1 -online
+        .\get-windowsautopilotinfocommunity.ps1 -online
         ")
 
     }
@@ -612,20 +612,20 @@ Write-Log -text "--- Start Logging: `$(Get-TimeStamp) ---"
         Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
         Install-PackageProvider -Name NuGet -Force
         Write-Output 'Installing Get-WindowsAutopilotInfo:'`n
-        Install-Script -Name Get-WindowsAutoPilotInfo -Force
+        Install-Script -Name get-windowsautopilotinfocommunity -Force
 
         Write-Output 'Selected Group Tag: `$GroupTag'
 
         Write-Output 'Installing dependencies (Module: WindowsAutopilotIntune).'`n
         Write-Output 'Opening Login Window after the installation was successfull:'`n
 
-        .\Get-WindowsAutopilotInfo.ps1 -online -assign -GroupTag '`$GroupTag'
+        .\get-windowsautopilotinfocommunity.ps1 -online -assign -GroupTag '`$GroupTag'
 
         ")
 
     }
 
-    `$var_text_output.AppendText("`r`n`$(Get-TimeStamp) Running: Get-WindowsAutoPilotInfo.ps1 -GroupTag `$GroupTag -online -assign -reboot")
+    `$var_text_output.AppendText("`r`n`$(Get-TimeStamp) Running: get-windowsautopilotinfocommunity.ps1 -GroupTag `$GroupTag -online -assign -reboot")
     # Scroll to bottom of the output box.
     `$var_text_output.ScrollToEnd()
 }
