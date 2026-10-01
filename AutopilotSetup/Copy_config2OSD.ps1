@@ -4,9 +4,6 @@
 
     Author:  Oliver Grimes
 #>
-Write-Host -ForegroundColor DarkGray "Updating OSDCloud Module Path"
-Update-Module -Name OSDCloud -Force
-Import-Module -Name OSDCloud -Force
 Write-Host -ForegroundColor DarkGray "Starting Copying Configuration json to Lastest OSDCloud Module Path"
 $OSDCloudModulePath = Get-OSDCloudModulePath
 
@@ -16,7 +13,7 @@ Write-Host -ForegroundColor DarkGray "Updating Json entries"
 $json = Get-Content -Path $OSDCloudJsonPath -Raw | ConvertFrom-Json
 
 $json.OSLanguageCode.default = "en-gb"
-$json.OSLanguageCode.values = "en-gb"
+$json.OSEdition.default = "Pro"
 
 Write-Host -ForegroundColor DarkGray "Saving Json to $OSDCloudJsonPath"
 $json | ConvertTo-Json | Set-Content -Path $OSDCloudJsonPath -Force
