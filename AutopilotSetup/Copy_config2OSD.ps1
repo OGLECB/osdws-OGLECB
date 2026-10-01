@@ -16,4 +16,4 @@ $json.OSLanguageCode.default = "en-gb"
 $json.OSEdition.default = "Pro"
 
 Write-Host -ForegroundColor DarkGray "Saving Json to $OSDCloudJsonPath"
-$json | ConvertTo-Json | Set-Content -Path $OSDCloudJsonPath -Force
+$json | ConvertTo-Json -depth 10 | Set-Content -Path $OSDCloudJsonPath -Force
